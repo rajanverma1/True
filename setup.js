@@ -18,8 +18,8 @@
 
 const { Client, GatewayIntentBits, ChannelType, PermissionFlagsBits } = require("discord.js");
 
-const BOT_TOKEN = "PASTE_YOUR_BOT_TOKEN_HERE";
-const GUILD_ID  = "PASTE_YOUR_SERVER_ID_HERE";   // Right-click server → Copy Server ID
+const BOT_TOKEN = "MTUwNzYzMDc2NTgwNTAxMDk3NA.GoWsIt.H3QSzNE_AgRXM8mgY0DALGdslaicFYT9Un7h_0";
+const GUILD_ID  = "1507630883794849884";   // Right-click server → Copy Server ID
 
 // ── Server Structure ─────────────────────────────────────────
 
