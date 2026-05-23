@@ -1,0 +1,12 @@
+{
+  "name": "truecloud-discord-setup",
+  "version": "1.0.0",
+  "description": "TrueCloud Discord server setup bot",
+  "main": "setup.js",
+  "scripts": {
+    "start": "node setup.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.15.3"
+  }
+}
