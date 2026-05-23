@@ -1,8 +1,7 @@
 // ============================================================
-//  TrueCloud Discord Server Setup Bot (REST only - no WebSocket)
+//  TrueCloud Discord Server Setup — zero dependencies
+//  Uses built-in fetch (Node 18+, which Railway uses by default)
 // ============================================================
-
-const { REST, Routes, PermissionFlagsBits } = require("discord.js");
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const GUILD_ID  = process.env.GUILD_ID;
@@ -12,11 +11,17 @@ if (!BOT_TOKEN || !GUILD_ID) {
   process.exit(1);
 }
 
-// Channel types (raw values — no Client needed)
+const BASE = "https://discord.com/api/v10";
+const HEADERS = {
+  "Authorization": `Bot ${BOT_TOKEN}`,
+  "Content-Type": "application/json",
+};
+
+// Channel types
 const TEXT     = 0;
 const VOICE    = 2;
 const CATEGORY = 4;
-const NEWS     = 5; // announcements
+const NEWS     = 5;
 
 const ROLES = [
   { name: "☁️ TrueCloud Team",  color: 0x00CFFF, hoist: true  },
@@ -35,54 +40,54 @@ const STRUCTURE = [
   {
     category: "WELCOME & INFO",
     channels: [
-      { name: "welcome",       type: TEXT, topic: "First stop for new members — rules, intro, and what TrueCloud is all about.", readonly: true },
-      { name: "announcements", type: NEWS, topic: "Official news: launches, maintenance, updates, and promotions.", readonly: true },
-      { name: "rules",         type: TEXT, topic: "Community guidelines. Read before participating.", readonly: true },
-      { name: "faq",           type: TEXT, topic: "Answers to the most common questions about our platform.", readonly: true },
-      { name: "roles",         type: TEXT, topic: "Self-assign roles for your platform, interests, and notifications." },
+      { name: "welcome",       type: TEXT, topic: "First stop for new members.", readonly: true },
+      { name: "announcements", type: NEWS, topic: "Official news and updates.",  readonly: true },
+      { name: "rules",         type: TEXT, topic: "Community guidelines.",       readonly: true },
+      { name: "faq",           type: TEXT, topic: "Common questions answered.",  readonly: true },
+      { name: "roles",         type: TEXT, topic: "Self-assign your roles." },
     ],
   },
   {
     category: "COMMUNITY",
     channels: [
-      { name: "general",        type: TEXT, topic: "Hang out, chat about anything and everything." },
-      { name: "introductions",  type: TEXT, topic: "New here? Tell us who you are and what you play!" },
-      { name: "off-topic",      type: TEXT, topic: "Memes, life stuff, random — if it doesn't fit elsewhere, put it here." },
-      { name: "media-showcase", type: TEXT, topic: "Share screenshots, clips, and highlights from your cloud gaming sessions." },
+      { name: "general",        type: TEXT, topic: "General chat." },
+      { name: "introductions",  type: TEXT, topic: "Introduce yourself!" },
+      { name: "off-topic",      type: TEXT, topic: "Anything goes." },
+      { name: "media-showcase", type: TEXT, topic: "Share your gaming clips." },
     ],
   },
   {
     category: "GAMING",
     channels: [
-      { name: "game-recommendations", type: TEXT, topic: "What should I play? Share and discover new titles." },
-      { name: "looking-for-group",    type: TEXT, topic: "Find teammates or co-op partners for any game." },
-      { name: "game-news",            type: TEXT, topic: "Latest releases, patches, and gaming industry news." },
-      { name: "tournaments",          type: TEXT, topic: "TrueCloud-hosted events, tournaments, and community challenges." },
+      { name: "game-recommendations", type: TEXT, topic: "What should I play?" },
+      { name: "looking-for-group",    type: TEXT, topic: "Find teammates." },
+      { name: "game-news",            type: TEXT, topic: "Latest gaming news." },
+      { name: "tournaments",          type: TEXT, topic: "TrueCloud events and tournaments." },
     ],
   },
   {
     category: "TRUECLOUD PLATFORM",
     channels: [
-      { name: "platform-feedback", type: TEXT, topic: "Suggestions and ideas to improve TrueCloud." },
-      { name: "bug-reports",       type: TEXT, topic: "Report issues you encounter. Use the pinned template." },
-      { name: "performance-tips",  type: TEXT, topic: "Share settings, configs, and tricks to optimize your stream." },
-      { name: "device-help",       type: TEXT, topic: "Platform-specific help: PC, mobile, TV, browser." },
+      { name: "platform-feedback", type: TEXT, topic: "Suggestions for TrueCloud." },
+      { name: "bug-reports",       type: TEXT, topic: "Report bugs here." },
+      { name: "performance-tips",  type: TEXT, topic: "Optimize your stream." },
+      { name: "device-help",       type: TEXT, topic: "PC, mobile, TV, browser help." },
     ],
   },
   {
     category: "SUPPORT",
     channels: [
-      { name: "open-a-ticket",   type: TEXT, topic: "Need help? Start here to open a support ticket with our team." },
-      { name: "account-billing", type: TEXT, topic: "Questions about your subscription, payments, or account." },
-      { name: "tech-support",    type: TEXT, topic: "Connection issues, lag, errors — get technical help here." },
+      { name: "open-a-ticket",   type: TEXT, topic: "Start a support ticket." },
+      { name: "account-billing", type: TEXT, topic: "Subscription and billing questions." },
+      { name: "tech-support",    type: TEXT, topic: "Technical issues and fixes." },
     ],
   },
   {
     category: "VOICE LOUNGES",
     channels: [
-      { name: "Gaming Lounge 🎮", type: VOICE },
-      { name: "Chill Zone ☁️",   type: VOICE },
-      { name: "Squad Up 🤝",     type: VOICE },
+      { name: "Gaming Lounge",  type: VOICE },
+      { name: "Chill Zone",     type: VOICE },
+      { name: "Squad Up",       type: VOICE },
     ],
   },
   {
@@ -91,8 +96,8 @@ const STRUCTURE = [
     channels: [
       { name: "staff-announcements", type: TEXT, topic: "Internal staff updates." },
       { name: "mod-log",             type: TEXT, topic: "Moderation action log." },
-      { name: "staff-chat",          type: TEXT, topic: "Staff coordination and discussion." },
-      { name: "Staff Room 🔒",       type: VOICE },
+      { name: "staff-chat",          type: TEXT, topic: "Staff coordination." },
+      { name: "Staff Room",          type: VOICE },
     ],
   },
 ];
@@ -103,134 +108,102 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-async function apiCall(fn, label) {
-  try {
-    const result = await fn();
-    console.log(`   ✔ ${label}`);
-    await sleep(300); // avoid rate limits
-    return result;
-  } catch (e) {
-    console.error(`   ✘ ${label} — ${e.message}`);
-    throw e;
+async function api(method, path, body) {
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: HEADERS,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 429) {
+    const data = await res.json();
+    console.log(`   ⏳ Rate limited — waiting ${data.retry_after}s`);
+    await sleep(data.retry_after * 1000 + 200);
+    return api(method, path, body); // retry
   }
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`${res.status} ${path} — ${err}`);
+  }
+  return res.json();
 }
 
 // ── Main ─────────────────────────────────────────────────────
 
 async function main() {
-  const rest = new REST({ version: "10" }).setToken(BOT_TOKEN);
+  console.log("\n🚀 TrueCloud server setup starting...\n");
 
-  console.log("\n🚀 Starting TrueCloud server setup (REST only)...\n");
+  // Verify token works
+  const me = await api("GET", "/users/@me");
+  console.log(`✅ Logged in as: ${me.username}\n`);
 
-  // 1. Fetch guild info (to get @everyone role ID)
-  const guild = await rest.get(Routes.guild(GUILD_ID));
-  const everyoneId = guild.id; // @everyone role ID always equals the guild ID
+  const everyoneId = GUILD_ID; // @everyone role ID = guild ID
 
-  // 2. Create roles
+  // 1. Create roles
   console.log("📦 Creating roles...");
   const roleMap = {};
   for (const r of ROLES) {
-    const role = await apiCall(
-      () => rest.post(Routes.guildRoles(GUILD_ID), {
-        body: { name: r.name, color: r.color, hoist: r.hoist, mentionable: false },
-      }),
-      `Role: ${r.name}`
-    );
+    const role = await api("POST", `/guilds/${GUILD_ID}/roles`, {
+      name: r.name, color: r.color, hoist: r.hoist, mentionable: false,
+    });
     roleMap[r.name] = role.id;
+    console.log(`   ✔ ${r.name}`);
+    await sleep(300);
   }
 
   const staffRoleId = roleMap["☁️ TrueCloud Team"];
   const modRoleId   = roleMap["🛡️ Moderator"];
 
-  // 3. Create categories & channels
+  // 2. Create categories & channels
   console.log("\n📂 Creating categories and channels...");
   for (const section of STRUCTURE) {
-    const categoryPerms = section.staffOnly
-      ? [
-          { id: everyoneId,  deny: String(PermissionFlagsBits.ViewChannel), type: 0 },
-          { id: staffRoleId, allow: String(PermissionFlagsBits.ViewChannel), type: 0 },
-          { id: modRoleId,   allow: String(PermissionFlagsBits.ViewChannel), type: 0 },
-        ]
-      : [];
+    const DENY_VIEW  = "1024";
+    const ALLOW_VIEW = "1024";
 
-    const category = await apiCall(
-      () => rest.post(Routes.guildChannels(GUILD_ID), {
-        body: { name: section.category, type: CATEGORY, permission_overwrites: categoryPerms },
-      }),
-      `📁 ${section.category}`
-    );
+    const categoryPerms = section.staffOnly ? [
+      { id: everyoneId,  deny: DENY_VIEW,  type: 0 },
+      { id: staffRoleId, allow: ALLOW_VIEW, type: 0 },
+      { id: modRoleId,   allow: ALLOW_VIEW, type: 0 },
+    ] : [];
+
+    const category = await api("POST", `/guilds/${GUILD_ID}/channels`, {
+      name: section.category,
+      type: CATEGORY,
+      permission_overwrites: categoryPerms,
+    });
+    console.log(`\n   📁 ${section.category}`);
+    await sleep(300);
 
     for (const ch of section.channels) {
       const chPerms = [...categoryPerms];
-
       if (ch.readonly) {
         chPerms.push({
           id: everyoneId,
-          deny: String(PermissionFlagsBits.SendMessages),
-          allow: String(PermissionFlagsBits.ViewChannel | PermissionFlagsBits.ReadMessageHistory),
+          deny: "2048",   // SEND_MESSAGES
+          allow: "65536", // READ_MESSAGE_HISTORY
           type: 0,
         });
       }
 
-      await apiCall(
-        () => rest.post(Routes.guildChannels(GUILD_ID), {
-          body: {
-            name: ch.name,
-            type: ch.type,
-            parent_id: category.id,
-            topic: ch.topic || undefined,
-            permission_overwrites: chPerms.length ? chPerms : undefined,
-          },
-        }),
-        `${ch.type === VOICE ? "🔊" : "#"} ${ch.name}`
-      );
+      await api("POST", `/guilds/${GUILD_ID}/channels`, {
+        name: ch.name,
+        type: ch.type,
+        parent_id: category.id,
+        ...(ch.topic ? { topic: ch.topic } : {}),
+        ...(chPerms.length ? { permission_overwrites: chPerms } : {}),
+      });
+      console.log(`      ${ch.type === VOICE ? "🔊" : "#"} ${ch.name}`);
+      await sleep(300);
     }
   }
 
-  console.log("\n🎉 TrueCloud server setup complete!");
-  console.log("👉 Go to: Server Settings → Server Template → Generate Template Link\n");
+  console.log("\n🎉 Done! All channels and roles created.");
+  console.log("👉 Server Settings → Server Template → Generate Template Link\n");
 }
 
 main().catch(e => {
-  console.error("❌ Fatal error:", e.message);
+  console.error("❌ Fatal:", e.message);
   process.exit(1);
-});];
-
-const STRUCTURE = [
-  {
-    category: "WELCOME & INFO",
-    channels: [
-      { name: "welcome",       type: ChannelType.GuildText,  topic: "First stop for new members — rules, intro, and what TrueCloud is all about.", readonly: true  },
-      { name: "announcements", type: ChannelType.GuildAnnouncement, topic: "Official news: launches, maintenance, updates, and promotions.", readonly: true  },
-      { name: "rules",         type: ChannelType.GuildText,  topic: "Community guidelines. Read before participating.",  readonly: true  },
-      { name: "faq",           type: ChannelType.GuildText,  topic: "Answers to the most common questions about our platform.", readonly: true  },
-      { name: "roles",         type: ChannelType.GuildText,  topic: "Self-assign roles for your platform, interests, and notifications.", readonly: false },
-    ],
-  },
-  {
-    category: "COMMUNITY",
-    channels: [
-      { name: "general",           type: ChannelType.GuildText, topic: "Hang out, chat about anything and everything." },
-      { name: "introductions",     type: ChannelType.GuildText, topic: "New here? Tell us who you are and what you play!" },
-      { name: "off-topic",         type: ChannelType.GuildText, topic: "Memes, life stuff, random — if it doesn't fit elsewhere, put it here." },
-      { name: "media-showcase",    type: ChannelType.GuildText, topic: "Share screenshots, clips, and highlights from your cloud gaming sessions." },
-    ],
-  },
-  {
-    category: "GAMING",
-    channels: [
-      { name: "game-recommendations", type: ChannelType.GuildText, topic: "What should I play? Share and discover new titles." },
-      { name: "looking-for-group",    type: ChannelType.GuildText, topic: "Find teammates or co-op partners for any game." },
-      { name: "game-news",            type: ChannelType.GuildText, topic: "Latest releases, patches, and gaming industry news." },
-      { name: "tournaments",          type: ChannelType.GuildText, topic: "TrueCloud-hosted events, tournaments, and community challenges." },
-    ],
-  },
-  {
-    category: "TRUECLOUD PLATFORM",
-    channels: [
-      { name: "platform-feedback", type: ChannelType.GuildText, topic: "Suggestions and ideas to improve TrueCloud." },
-      { name: "bug-reports",       type: ChannelType.GuildText, topic: "Report issues you encounter. Use the pinned template." },
-      { name: "performance-tips",  type: ChannelType.GuildText, topic: "Share settings, configs, and tricks to optimize your stream." },
+});tings, configs, and tricks to optimize your stream." },
       { name: "device-help",       type: ChannelType.GuildText, topic: "Platform-specific help: PC, mobile, TV, browser." },
     ],
   },
